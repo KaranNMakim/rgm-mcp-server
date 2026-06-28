@@ -16,7 +16,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 mcp = FastMCP("rgm-rgm-server")
 
