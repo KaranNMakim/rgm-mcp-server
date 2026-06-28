@@ -8,6 +8,7 @@ Alco-Bev / North America space. Designed to work with flat-file exports from
 
 | Tool | Description |
 |---|---|
+| `get_nielsen_input_schema` | Show the required and optional column schema for each NIQ input file before you start |
 | `build_analytical_base_table` | Join NIQ sales + distribution + pricing exports into a clean, model-ready Analytical Base Table (ABT) with log-transformed columns |
 | `calculate_price_elasticity` | OLS log-log regression → own-price & cross-price elasticity per segment (market, channel, SKU, etc.) |
 | `score_promo_effectiveness` | Rolling-baseline lift %, incremental volume/revenue, and trade ROI per promo event |
@@ -18,7 +19,7 @@ Alco-Bev / North America space. Designed to work with flat-file exports from
 ## Requirements
 
 - Python 3.10+
-- Dependencies: `mcp[cli]`, `pandas`, `pyarrow`, `numpy`, `scipy`
+- Dependencies: `fastmcp`, `pandas`, `pyarrow`, `numpy`, `scipy`
 
 ## Setup
 
@@ -53,6 +54,9 @@ Register in your MCP client config (`mcp.json`):
 
 ## Typical workflow
 
+0. **Check the input schema** for your NIQ files:
+   > "What columns do I need in my NIQ sales file?"
+
 1. **Build the ABT** from your NIQ exports:
    > "Build me the analytical base table from sales.csv, dist.csv, and pricing.csv, save to abt.csv"
 
@@ -71,26 +75,52 @@ Register in your MCP client config (`mcp.json`):
 6. **Competitive price indexing**:
    > "Compute the competitive price index for BrandA across all markets"
 
-## Data format
+## NIQ input file schemas
 
-The server expects NIQ-style flat files with these default column names (all overridable via tool parameters):
+Call `get_nielsen_input_schema()` at any time to get the full column spec. Quick reference:
 
-| Column | Default name | Description |
-|---|---|---|
-| Time period | `period_end_date` | Week-ending or month-ending date |
-| SKU / UPC | `upc` | Product identifier |
-| Market | `market` | Retail geography |
-| Channel | `channel` | Trade channel (Grocery, Liquor, etc.) |
-| Volume | `unit_sales` | Units sold |
-| Dollar sales | `dollar_sales` | Revenue |
-| Own price | `avg_price_per_unit` | Average shelf price |
-| Promo flag | `any_promo_flag` | 1 = promoted week |
-| TDP | `total_distribution_points` | Distribution measure |
-| Trade spend | `trade_spend` | Promo cost (optional, for ROI) |
-| Competitor brand | `competitor_brand` | Competitor identifier (pricing file) |
-| Competitor price | `comp_avg_price` | Competitor average price (pricing file) |
+### sales file (`sales_file`)
 
-All column names can be overridden when calling each tool.
+| Column | Type | Required | Description |
+|---|---|---|---|
+| `period_end_date` | date | ✅ | Week- or month-ending date (YYYY-MM-DD) |
+| `upc` | string | ✅ | SKU / Universal Product Code |
+| `market` | string | ✅ | NIQ retail geography |
+| `channel` | string | ✅ | Trade channel (Grocery, Liquor, Club, etc.) |
+| `unit_sales` | numeric | ✅ | Units sold in the period |
+| `dollar_sales` | numeric | ✅ | Dollar revenue in the period |
+| `avg_price_per_unit` | numeric | ✅ | Average shelf price (USD, no $ symbol) |
+| `brand` | string | — | Brand name (required for CPI tool) |
+| `category` | string | — | Category / sub-category |
+| `pack_size` | string | — | Pack size / volume format |
+| `any_promo_flag` | 0 / 1 | — | 1 = promoted week (required for promo tools) |
+| `trade_spend` | numeric | — | Trade spend in USD (required for promo ROI) |
+
+### distribution file (`distribution_file`)
+
+| Column | Type | Required | Description |
+|---|---|---|---|
+| `period_end_date` | date | ✅ | Must match sales file exactly |
+| `upc` | string | ✅ | Must match sales file exactly |
+| `market` | string | ✅ | Must match sales file exactly |
+| `channel` | string | ✅ | Must match sales file exactly |
+| `total_distribution_points` | numeric | ✅ | NIQ TDP (% ACV weighted distribution) |
+
+### pricing file (`pricing_file`)
+
+| Column | Type | Required | Description |
+|---|---|---|---|
+| `period_end_date` | date | ✅ | Must match sales file exactly |
+| `upc` | string | ✅ | Must match sales file exactly |
+| `market` | string | ✅ | Must match sales file exactly |
+| `channel` | string | ✅ | Must match sales file exactly |
+| `competitor_brand` | string | ✅ | Competitor brand name |
+| `comp_avg_price` | numeric | ✅ | Competitor average shelf price (USD) |
+| `avg_price_per_unit` | numeric | — | Own price (can be omitted if in sales file) |
+
+> All three files are joined on `period_end_date + upc + market + channel`. Values must match exactly (case-sensitive) across files.
+>
+> All column names can be overridden via tool parameters when calling each tool.
 
 ## License
 
