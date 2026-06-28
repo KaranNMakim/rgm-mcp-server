@@ -1,7 +1,7 @@
 # RGM MCP Server
 
 A Python MCP server exposing analytical tools for **Revenue Growth Management (RGM)** in the
-Alco-Bev / North America space. Designed to work with flat-file exports from
+Consumer Goods and Services space. Designed to work with flat-file exports from
 [NIQ / NielsenIQ](https://nielseniq.com) (CSV or Parquet).
 
 ## Tools
