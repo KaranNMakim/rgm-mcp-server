@@ -706,6 +706,298 @@ def compute_competitive_price_index(
 
 
 # ===========================================================================
+# TOOL 7 — Get NIQ Input Schema
+# ===========================================================================
+
+@mcp.tool()
+def get_nielsen_input_schema(
+    file_type: str = "all",
+) -> str:
+    """
+    Return the expected column schema for each NIQ / Nielsen flat-file input
+    used by the RGM MCP server.
+
+    Use this before calling build_analytical_base_table to understand exactly
+    what columns each input CSV/Parquet file must contain, which are required
+    vs optional, and what format each value should be in.
+
+    Parameters
+    ----------
+    file_type : Which file schema to return.
+                One of: "sales", "distribution", "pricing", "all" (default).
+
+    Returns
+    -------
+    JSON: per-file schema with column name, type, required flag, accepted
+    values/format, and description.
+    """
+    schemas = {
+        "sales": {
+            "description": (
+                "Weekly or monthly POS scan data exported from NIQ. One row per "
+                "SKU × market × channel × time period. Passed as `sales_file` to "
+                "build_analytical_base_table."
+            ),
+            "columns": [
+                {
+                    "name": "period_end_date",
+                    "type": "date",
+                    "required": True,
+                    "format": "YYYY-MM-DD (ISO 8601) or MM/DD/YYYY",
+                    "example": "2024-03-31",
+                    "description": "Week-ending or month-ending date of the reporting period.",
+                },
+                {
+                    "name": "upc",
+                    "type": "string",
+                    "required": True,
+                    "format": "12- or 14-digit UPC, or any product identifier string",
+                    "example": "012345678901",
+                    "description": "Universal Product Code — uniquely identifies the SKU.",
+                },
+                {
+                    "name": "market",
+                    "type": "string",
+                    "required": True,
+                    "format": "Free text NIQ market name",
+                    "example": "Chicago",
+                    "description": "NIQ retail geography / market definition.",
+                },
+                {
+                    "name": "channel",
+                    "type": "string",
+                    "required": True,
+                    "format": "Free text",
+                    "example": "Grocery",
+                    "description": "Trade channel (e.g. Grocery, Drug, Liquor, Club, C-Store).",
+                },
+                {
+                    "name": "brand",
+                    "type": "string",
+                    "required": False,
+                    "format": "Free text",
+                    "example": "BrandA",
+                    "description": "Brand name. Required for compute_competitive_price_index.",
+                },
+                {
+                    "name": "category",
+                    "type": "string",
+                    "required": False,
+                    "format": "Free text",
+                    "example": "Spirits",
+                    "description": "Category or sub-category (e.g. Spirits, Beer, Wine, RTD).",
+                },
+                {
+                    "name": "pack_size",
+                    "type": "string",
+                    "required": False,
+                    "format": "Free text",
+                    "example": "750mL",
+                    "description": "Pack size / volume format used for competitive price indexing.",
+                },
+                {
+                    "name": "unit_sales",
+                    "type": "numeric (float or int)",
+                    "required": True,
+                    "format": "Non-negative number",
+                    "example": "320",
+                    "description": "Total units sold in the period.",
+                },
+                {
+                    "name": "dollar_sales",
+                    "type": "numeric (float)",
+                    "required": True,
+                    "format": "Non-negative USD amount (no $ symbol)",
+                    "example": "2560.00",
+                    "description": "Total dollar revenue in the period.",
+                },
+                {
+                    "name": "avg_price_per_unit",
+                    "type": "numeric (float)",
+                    "required": True,
+                    "format": "USD per unit (no $ symbol)",
+                    "example": "12.49",
+                    "description": "Average shelf price per unit (dollar_sales / unit_sales).",
+                },
+                {
+                    "name": "any_promo_flag",
+                    "type": "integer or boolean",
+                    "required": False,
+                    "format": "1 / 0  or  True / False",
+                    "example": "1",
+                    "description": (
+                        "1 if the SKU was on any promotion in that period "
+                        "(feature, display, TPR, multi-buy). 0 otherwise. "
+                        "Required for score_promo_effectiveness."
+                    ),
+                },
+                {
+                    "name": "trade_spend",
+                    "type": "numeric (float)",
+                    "required": False,
+                    "format": "USD amount (no $ symbol)",
+                    "example": "450.00",
+                    "description": (
+                        "Trade / promotional spend associated with the period. "
+                        "Used to compute promo ROI in score_promo_effectiveness."
+                    ),
+                },
+            ],
+        },
+
+        "distribution": {
+            "description": (
+                "NIQ distribution / TDP (Total Distribution Points) file. "
+                "One row per SKU × market × channel × time period. "
+                "Passed as `distribution_file` to build_analytical_base_table."
+            ),
+            "columns": [
+                {
+                    "name": "period_end_date",
+                    "type": "date",
+                    "required": True,
+                    "format": "YYYY-MM-DD or MM/DD/YYYY",
+                    "example": "2024-03-31",
+                    "description": "Must match the dates in the sales file exactly.",
+                },
+                {
+                    "name": "upc",
+                    "type": "string",
+                    "required": True,
+                    "format": "12- or 14-digit UPC, or product identifier",
+                    "example": "012345678901",
+                    "description": "Must match UPCs in the sales file.",
+                },
+                {
+                    "name": "market",
+                    "type": "string",
+                    "required": True,
+                    "format": "Free text NIQ market name",
+                    "example": "Chicago",
+                    "description": "Must match market values in the sales file.",
+                },
+                {
+                    "name": "channel",
+                    "type": "string",
+                    "required": True,
+                    "format": "Free text",
+                    "example": "Grocery",
+                    "description": "Must match channel values in the sales file.",
+                },
+                {
+                    "name": "total_distribution_points",
+                    "type": "numeric (float or int)",
+                    "required": True,
+                    "format": "0–100+ (sum of % ACV across all outlets carrying the SKU)",
+                    "example": "78.5",
+                    "description": (
+                        "NIQ Total Distribution Points (TDP). Used as a control variable "
+                        "in the price elasticity regression."
+                    ),
+                },
+            ],
+        },
+
+        "pricing": {
+            "description": (
+                "NIQ pricing file containing both own and competitor shelf prices. "
+                "One row per SKU × market × channel × competitor brand × time period. "
+                "Passed as `pricing_file` to build_analytical_base_table."
+            ),
+            "columns": [
+                {
+                    "name": "period_end_date",
+                    "type": "date",
+                    "required": True,
+                    "format": "YYYY-MM-DD or MM/DD/YYYY",
+                    "example": "2024-03-31",
+                    "description": "Must match dates in the sales file.",
+                },
+                {
+                    "name": "upc",
+                    "type": "string",
+                    "required": True,
+                    "format": "12- or 14-digit UPC, or product identifier",
+                    "example": "012345678901",
+                    "description": "Must match UPCs in the sales file.",
+                },
+                {
+                    "name": "market",
+                    "type": "string",
+                    "required": True,
+                    "format": "Free text NIQ market name",
+                    "example": "Chicago",
+                    "description": "Must match market values in the sales file.",
+                },
+                {
+                    "name": "channel",
+                    "type": "string",
+                    "required": True,
+                    "format": "Free text",
+                    "example": "Grocery",
+                    "description": "Must match channel values in the sales file.",
+                },
+                {
+                    "name": "avg_price_per_unit",
+                    "type": "numeric (float)",
+                    "required": False,
+                    "format": "USD per unit (no $ symbol)",
+                    "example": "12.49",
+                    "description": (
+                        "Own brand average shelf price. Can be omitted if already "
+                        "present in the sales file."
+                    ),
+                },
+                {
+                    "name": "competitor_brand",
+                    "type": "string",
+                    "required": True,
+                    "format": "Free text brand name",
+                    "example": "CompetitorA",
+                    "description": (
+                        "Name of the competitor brand for this price observation. "
+                        "The tool pivots this into wide columns "
+                        "(comp_price_CompetitorA, comp_price_CompetitorB, …) in the ABT."
+                    ),
+                },
+                {
+                    "name": "comp_avg_price",
+                    "type": "numeric (float)",
+                    "required": True,
+                    "format": "USD per unit (no $ symbol)",
+                    "example": "10.99",
+                    "description": (
+                        "Competitor average shelf price per unit. Used for cross-price "
+                        "elasticity and competitive price indexing."
+                    ),
+                },
+            ],
+        },
+    }
+
+    if file_type == "all":
+        selected = schemas
+    elif file_type in schemas:
+        selected = {file_type: schemas[file_type]}
+    else:
+        return json.dumps({
+            "error": f"Unknown file_type '{file_type}'. Must be one of: sales, distribution, pricing, all."
+        }, indent=2)
+
+    # Add top-level join key note
+    output = {
+        "note": (
+            "All three files are joined on the combination of: "
+            "period_end_date + upc + market + channel. "
+            "Values in these columns must match exactly across files (case-sensitive)."
+        ),
+        "files": selected,
+    }
+
+    return json.dumps(output, indent=2)
+
+
+# ===========================================================================
 # Entry point
 # ===========================================================================
 
